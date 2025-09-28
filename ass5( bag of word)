@@ -1,0 +1,186 @@
+from numpy import array
+from string import punctuation
+from os import listdir
+from collections import Counter
+from nltk.corpus import stopwords
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from pandas import DataFrame
+from matplotlib import pyplot
+import nltk
+
+# download stopwords if not already
+nltk.download('stopwords')
+
+# ---------------------------
+# Load document
+# ---------------------------
+def load_doc(filename):
+    with open(filename, 'r') as file:
+        text = file.read()
+    return text
+
+# ---------------------------
+# Clean document
+# ---------------------------
+def clean_doc(doc):
+    tokens = doc.split()
+    # remove punctuation
+    table = str.maketrans('', '', punctuation)
+    tokens = [w.translate(table) for w in tokens]
+    # keep only alphabetic
+    tokens = [word for word in tokens if word.isalpha()]
+    # remove stopwords
+    stop_words = set(stopwords.words('english'))
+    tokens = [w for w in tokens if not w in stop_words]
+    # remove short tokens
+    tokens = [w for w in tokens if len(w) > 1]
+    return tokens
+
+# ---------------------------
+# Add document tokens to vocab
+# ---------------------------
+def add_doc_to_vocab(filename, vocab):
+    tokens = clean_doc(load_doc(filename))
+    vocab.update(tokens)
+
+# ---------------------------
+# Process directory of docs (for vocab building)
+# ---------------------------
+def process_docs1(directory, vocab):
+    for filename in listdir(directory):
+        if filename.startswith('cv9'):  # skip test set
+            continue
+        path = directory + '/' + filename
+        add_doc_to_vocab(path, vocab)
+
+# ---------------------------
+# Build vocabulary
+# ---------------------------
+vocab = Counter()
+process_docs1('txt_sentoken/pos', vocab)
+process_docs1('txt_sentoken/neg', vocab)
+print("Vocab size:", len(vocab))
+print(vocab.most_common(20))
+
+# Keep words with min occurrence
+min_occurrence = 2
+tokens = [k for k, c in vocab.items() if c >= min_occurrence]
+
+# ---------------------------
+# Save vocab
+# ---------------------------
+def save_list(lines, filename):
+    with open(filename, 'w') as file:
+        file.write('\n'.join(lines))
+
+save_list(tokens, 'vocab.txt')
+
+# Reload vocab
+vocab = set(load_doc('vocab.txt').split())
+
+# ---------------------------
+# Convert doc to tokens line
+# ---------------------------
+def doc_to_line(filename, vocab):
+    tokens = clean_doc(load_doc(filename))
+    tokens = [w for w in tokens if w in vocab]
+    return ' '.join(tokens)
+
+# ---------------------------
+# Process documents into lines
+# ---------------------------
+def process_docs(directory, vocab, is_train):
+    lines = []
+    for filename in listdir(directory):
+        if is_train and filename.startswith('cv9'):
+            continue
+        if not is_train and not filename.startswith('cv9'):
+            continue
+        path = directory + '/' + filename
+        lines.append(doc_to_line(path, vocab))
+    return lines
+
+# ---------------------------
+# Prepare training and test data
+# ---------------------------
+positive_lines = process_docs('txt_sentoken/pos', vocab, True)
+negative_lines = process_docs('txt_sentoken/neg', vocab, True)
+train_docs = negative_lines + positive_lines
+
+positive_lines = process_docs('txt_sentoken/pos', vocab, False)
+negative_lines = process_docs('txt_sentoken/neg', vocab, False)
+test_docs = negative_lines + positive_lines
+
+# Labels
+ytrain = array([0 for _ in range(900)] + [1 for _ in range(900)])
+ytest = array([0 for _ in range(100)] + [1 for _ in range(100)])
+
+# ---------------------------
+# Prepare data using Tokenizer
+# ---------------------------
+def prepare_data(train_docs, test_docs, mode):
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts(train_docs)
+    Xtrain = tokenizer.texts_to_matrix(train_docs, mode=mode)
+    Xtest = tokenizer.texts_to_matrix(test_docs, mode=mode)
+    return Xtrain, Xtest, tokenizer
+
+# ---------------------------
+# Evaluate model
+# ---------------------------
+def evaluate_model(Xtrain, ytrain, Xtest, ytest):
+    scores = []
+    n_repeats = 5   # repeat multiple runs
+    n_words = Xtest.shape[1]
+
+    for i in range(n_repeats):
+        model = Sequential()
+        model.add(Dense(50, input_shape=(n_words,), activation='relu'))
+        model.add(Dense(1, activation='sigmoid'))
+        model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+        model.fit(Xtrain, ytrain, epochs=20, verbose=0)
+        loss, acc = model.evaluate(Xtest, ytest, verbose=0)
+        scores.append(acc)
+        print(f'Run {i+1}, Accuracy: {acc:.4f}')
+
+    return scores, model
+
+# ---------------------------
+# Run for different vectorization modes
+# ---------------------------
+modes = ['binary', 'count', 'tfidf', 'freq']
+results = DataFrame()
+final_model = None
+final_tokenizer = None
+
+for mode in modes:
+    Xtrain, Xtest, tokenizer = prepare_data(train_docs, test_docs, mode)
+    scores, model = evaluate_model(Xtrain, ytrain, Xtest, ytest)
+    results[mode] = scores
+    final_model = model
+    final_tokenizer = tokenizer
+
+print(results.describe())
+results.boxplot()
+pyplot.show()
+
+# ---------------------------
+# Prediction function
+# ---------------------------
+def predict_sentiment(review, vocab, tokenizer, model):
+    tokens = clean_doc(review)
+    tokens = [w for w in tokens if w in vocab]
+    line = ' '.join(tokens)
+    encoded = tokenizer.texts_to_matrix([line], mode='freq')
+    yhat = model.predict(encoded, verbose=0)
+    return round(yhat[0, 0])
+
+# Example predictions
+text1 = "Best movie ever!"
+print("Sentiment:", predict_sentiment(text1, vocab, final_tokenizer, final_model))
+
+text2 = "This is a bad movie."
+print("Sentiment:", predict_sentiment(text2, vocab, final_tokenizer, final_model))
