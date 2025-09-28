@@ -1,0 +1,57 @@
+import tensorflow as tf 
+from tensorflow.keras.models import Sequential 
+from tensorflow.keras.layers import Dense, Flatten 
+from tensorflow.keras.optimizers import SGD 
+import matplotlib.pyplot as plt 
+import numpy as np
+
+# Load the dataset 
+(x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data() 
+# Normalize pixel values (0–255 → 0–1) 
+x_train = x_train.astype("float32") / 255.0 
+x_test = x_test.astype("float32") / 255.0 
+print("Training Data:", x_train.shape, y_train.shape) 
+print("Testing Data:", x_test.shape, y_test.shape)
+
+model = Sequential([ 
+    Flatten(input_shape=(28, 28)),   # Input layer (28x28 → 784) 
+    Dense(256, activation="relu"),   # Hidden layer 1 
+    Dense(128, activation="relu"),   # Hidden layer 2 
+    Dense(10, activation="softmax")  # Output layer (10 classes) 
+]) 
+ 
+# Compile the model with SGD optimizer 
+model.compile(optimizer=SGD(learning_rate=0.01, momentum=0.9), 
+              loss="sparse_categorical_crossentropy", 
+              metrics=["accuracy"])
+history = model.fit(x_train, y_train, 
+                    validation_data=(x_test, y_test), 
+                    epochs=10, 
+                    batch_size=64, 
+                    verbose=1)
+
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=0) 
+print(f"✅ Test Loss: {test_loss:.4f}") 
+print(f"✅ Test Accuracy: {test_acc:.4f}") 
+# Plot loss and accuracy 
+plt.figure(figsize=(12, 5)) 
+# Loss plot 
+plt.subplot(1, 2, 1) 
+plt.plot(history.history["loss"], label="Train Loss") 
+plt.plot(history.history["val_loss"], label="Validation Loss") 
+plt.title("Training & Validation Loss") 
+plt.xlabel("Epochs") 
+plt.ylabel("Loss") 
+plt.legend() 
+# Accuracy plot 
+plt.subplot(1, 2, 2) 
+plt.plot(history.history["accuracy"], label="Train Accuracy") 
+plt.plot(history.history["val_accuracy"], label="Validation Accuracy") 
+plt.title("Training & Validation Accuracy") 
+plt.xlabel("Epochs") 
+plt.ylabel("Accuracy") 
+plt.legend() 
+plt.show()
+predictions = model.predict(x_test[:5]) 
+print("Predicted labels:", np.argmax(predictions, axis=1)) 
+print("True labels: ", y_test[:5])
