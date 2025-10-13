@@ -1,19 +1,18 @@
- !pip install tensorflow
- import tensorflow as tf
- from tensorflow.keras import layers, models
- from tensorflow.keras.preprocessing.image import ImageDataGenerator
- from tensorflow.keras.callbacks import EarlyStopping
- import matplotlib.pyplot as plt
- import numpy as np
- import seaborn as sns
- from sklearn.metrics import confusion_matrix, classification_report
- # Step 2: Dataset paths
- train_dir = train_dir = r"C:\Users\KIRAN\Downloads\archive\Small 
-Object dataset\train" # Replace with your train folder
- val_dir = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\
- test"      # Replace with your validation/test folder
- # Step 3: Data preprocessing & strong augmentation
- train_datagen = ImageDataGenerator(
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, classification_report
+
+# --- Paths (update these) ---
+train_dir = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\train"
+val_dir   = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\test"
+
+# --- Data generators ---
+train_datagen = ImageDataGenerator(
     rescale=1./255,
     rotation_range=40,
     width_shift_range=0.3,
@@ -22,159 +21,93 @@ Object dataset\train" # Replace with your train folder
     zoom_range=0.3,
     horizontal_flip=True,
     fill_mode='nearest'
- )
- val_datagen = ImageDataGenerator(rescale=1./255)
- train_data = train_datagen.flow_from_directory(
-    train_dir,
-    target_size=(224, 224),
-    batch_size=32,
-    class_mode='categorical',
-    shuffle=True
- )
- val_data = val_datagen.flow_from_directory(
-    val_dir,
-    target_size=(224, 224),
-    batch_size=32,
-    class_mode='categorical',
-    shuffle=False
- )
+)
+val_datagen = ImageDataGenerator(rescale=1./255)
 
-base_model = tf.keras.applications.DenseNet121(
-    input_shape=(224, 224, 3),
-    include_top=False,
-    weights='imagenet'
- )
- # Step 5: Freeze lower layers
- for layer in base_model.layers[:300]:
+train_data = train_datagen.flow_from_directory(
+    train_dir, target_size=(224,224), batch_size=32, class_mode='categorical', shuffle=True
+)
+val_data = val_datagen.flow_from_directory(
+    val_dir, target_size=(224,224), batch_size=32, class_mode='categorical', shuffle=False
+)
+
+# --- Base model ---
+base_model = tf.keras.applications.DenseNet121(input_shape=(224,224,3), include_top=False, weights='imagenet')
+
+# --- Freeze some layers ---
+for layer in base_model.layers[:300]:
     layer.trainable = False
- # Step 6: Add custom classifier
- model = models.Sequential([
+
+# --- Top classifier ---
+model = models.Sequential([
     base_model,
     layers.GlobalAveragePooling2D(),
-    layers.Dense(256, activation='relu', 
-kernel_regularizer=tf.keras.regularizers.l2(0.001)),
+    layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001)),
     layers.Dropout(0.5),
     layers.Dense(train_data.num_classes, activation='softmax')
- ])
- # Step 7: Compile model
- model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
- )
- # Step 8: Early stopping to prevent overfitting
- early_stop = EarlyStopping(
-    monitor='val_loss', 
-    patience=5, 
-    restore_best_weights=True
- )
- # Step 9: Train classifier layers
- history = model.fit(
-    train_data,
-    epochs=5,
-    validation_data=val_data,
-    callbacks=[early_stop]
- )
+])
 
- # Step 10: Fine-tuning top layers
- for layer in base_model.layers[300:]:
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+history = model.fit(train_data, epochs=5, validation_data=val_data, callbacks=[early_stop])
+
+# --- Fine-tune top of base model ---
+for layer in base_model.layers[300:]:
     layer.trainable = True
- model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.00001),
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
- )
- history_fine = model.fit(
-    train_data,
-    epochs=5,
-    validation_data=val_data,
-    callbacks=[early_stop]
- )
-# Step 11: Evaluate model
- loss, acc = model.evaluate(val_data)
- print(f"Validation Accuracy: {acc*100:.2f}%")
 
-# Step 12: Plot accuracy and loss curves
- plt.figure(figsize=(12,5))
- plt.subplot(1,2,1)
- plt.plot(history.history['accuracy'] + 
-history_fine.history['accuracy'], label='Train Accuracy')
- plt.plot(history.history['val_accuracy'] + 
-history_fine.history['val_accuracy'], label='Val Accuracy')
- plt.title("Accuracy over Epochs")
- plt.legend()
- plt.subplot(1,2,2)
- plt.plot(history.history['loss'] + history_fine.history['loss'], 
-label='Train Loss')
- plt.plot(history.history['val_loss'] + 
-history_fine.history['val_loss'], label='Val Loss')
- plt.title("Loss over Epochs")
- plt.legend()
- plt.show()
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
 
-# Step 13: Confusion matrix and classification report
- val_data.reset()
- preds =
- model.predict(val_data)
- y_pred =
- np.argmax(preds, axis=1)
- y_true =
- val_data.classes
- class_names = 
-list
- (val_data.class_indices.keys())
- # Confusion matrix
- cm =
- confusion_matrix(y_true, y_pred)
- plt.figure(figsize=(8,6
- ))
- sns.heatmap(cm, annot=
- True
- , fmt=
- yticklabels=
- class_names, cmap=
- plt.xlabel(
- "Predicted")
- plt.ylabel(
- "True")
- plt.title(
- "Confusion Matrix")
- plt.show()
- "d"
- , xticklabels=
- class_names, 
-"Blues")
- # Precision, Recall, F1-score
- report =
- classification_report(y_true, y_pred, 
-target_names=
- class_names)
- print(
- "Classification Report:
- \n"
- , report)
-# Step 14: Predict on a single image
- from
- tensorflow.keras.preprocessing 
-import
- image
- img_path = 
-r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\
- test\fly\img\fly002.jpg" 
-# replace with your image path
-img =
- image.load_img(img_path, target_size=(
- img_array =
- image.img_to_array(img) / 
-255.0
- img_array =
- 224, 
-224))
- np.expand_dims(img_array, axis=0)
- prediction =
- model.predict(img_array)
- predicted_class =
- class_names[np.argmax(prediction)]
- print(
- "Predicted Object:"
- , predicted_class)
+history_fine = model.fit(train_data, epochs=5, validation_data=val_data, callbacks=[early_stop])
+
+# --- Evaluate ---
+loss, acc = model.evaluate(val_data)
+print(f"Validation Accuracy: {acc*100:.2f}%")
+
+# --- Plot training curves (concatenate safely) ---
+train_acc = history.history.get('accuracy', []) + history_fine.history.get('accuracy', [])
+val_acc   = history.history.get('val_accuracy', []) + history_fine.history.get('val_accuracy', [])
+train_loss = history.history.get('loss', []) + history_fine.history.get('loss', [])
+val_loss   = history.history.get('val_loss', []) + history_fine.history.get('val_loss', [])
+
+plt.figure(figsize=(12,5))
+plt.subplot(1,2,1)
+plt.plot(train_acc, label='Train Accuracy')
+plt.plot(val_acc, label='Val Accuracy')
+plt.legend(); plt.title('Accuracy')
+
+plt.subplot(1,2,2)
+plt.plot(train_loss, label='Train Loss')
+plt.plot(val_loss, label='Val Loss')
+plt.legend(); plt.title('Loss')
+plt.show()
+
+# --- Predictions & metrics ---
+val_data.reset()
+preds = model.predict(val_data, verbose=1)
+y_pred = np.argmax(preds, axis=1)
+y_true = val_data.classes
+class_names = list(val_data.class_indices.keys())
+
+cm = confusion_matrix(y_true, y_pred)
+plt.figure(figsize=(8,6))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
+plt.xlabel("Predicted"); plt.ylabel("True"); plt.title("Confusion Matrix")
+plt.show()
+
+print("Classification Report:\n", classification_report(y_true, y_pred, target_names=class_names))
+
+# --- Single image predict ---
+from tensorflow.keras.preprocessing import image
+img_path = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\test\fly\img\fly002.jpg"
+img = image.load_img(img_path, target_size=(224,224))
+img_array = image.img_to_array(img) / 255.0
+img_array = np.expand_dims(img_array, axis=0)
+pred = model.predict(img_array)
+predicted_class = class_names[np.argmax(pred)]
+print("Predicted Object:", predicted_class)
