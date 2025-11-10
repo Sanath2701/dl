@@ -1,0 +1,57 @@
+import tensorflow as tf
+import numpy as np
+
+a = tf.random.uniform(shape =[16,16],minval=0,maxval=101,dtype=tf.int32)
+b = tf.random.uniform(shape =[16,16],minval=0,maxval=101,dtype=tf.int32)
+
+print(tf.add(a,b))
+print(tf.subtract(a,b))
+print(tf.multiply(a,b))
+print(tf.divide(a,b))
+
+tf.transpose(a))
+tf.reduce_mean(b)
+tf.matmul(a,b)
+
+c=tf.eye(num_rows=16,dtype=tf.int32)
+a+c
+print(a[1:3,1:3]
+
+model=tf.keras.Sequential([tf.keras.layers.Dense(1)])
+model.compile(optimizer='adam',loss='mse')
+model.fit(a,b,epochs=1000,verbose=1)
+
+print("predictions for x=1:",model.predict(tf.constant(np.full((16,16),1.0),dtype=tf.float32))[0][0])
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+A = torch.randint(low=0,high=101,shape=(16,16),dtype=torch.float32)
+B = torch.randint(low=0,high=101,shape=(16,16),dtype=torch.float32)
+A=A/100.0
+B=B/100.0
+
+model=nn.Sequential(
+    nn.Linear(16,64),
+    nn.ReLU(),
+    nn.Linear(64,64),
+    nn.ReLU(),
+    nn.Linear(64,16)
+)
+
+criterion= nn.MSELoss()
+optimizer=optim.Adam(model.parameters(),lr=1e-3)
+
+model.train()
+for epoch in range(500):
+    optimizer.zero_grad()
+    pred = model(A)          
+    loss = criterion(pred, B)
+    loss.backward()
+    optimizer.step()
+model.eval()
+with torch.no_grad():
+    test = torch.full((1, 16), 1.0, dtype=torch.float32) / 100.0
+    out = model(test)        # shape (1,16)
+    print("Prediction for x=1 (first 5 dims):", out[0, :5].tolist())
