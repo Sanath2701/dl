@@ -1,0 +1,95 @@
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.datasets import fashion_mnist
+from tensorflow.keras.utils import to_categorical
+import matplotlib.pyplot as plt
+import numpy as np
+import random
+
+# Step 1: Load Fashion MNIST dataset
+(x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
+
+print("Training data shape:", x_train.shape)
+print("Test data shape:", x_test.shape)
+
+# Step 2: Normalize pixel values (0–255 → 0–1)
+x_train = x_train.astype('float32') / 255.0
+x_test = x_test.astype('float32') / 255.0
+
+# Step 3: Reshape data for CNN input (28x28x1)
+x_train = x_train.reshape(x_train.shape[0], 28, 28, 1)
+x_test = x_test.reshape(x_test.shape[0], 28, 28, 1)
+
+# Step 4: One-hot encode labels
+y_train = to_categorical(y_train, 10)
+y_test = to_categorical(y_test, 10)
+
+# Step 5: Define class names
+class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
+               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+
+# Step 6: Build CNN model
+model = Sequential([
+    Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1)),
+    MaxPooling2D((2,2)),
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D((2,2)),
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dropout(0.3),
+    Dense(10, activation='softmax')
+])
+
+# Step 7: Compile model
+model.compile(optimizer='adam',
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+# Step 8: Train the model
+history = model.fit(x_train, y_train, epochs=10, batch_size=128,
+                    validation_split=0.1, verbose=1)
+
+# Step 9: Evaluate on test data
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=0)
+print(f"\n✅ Test Accuracy: {test_acc*100:.2f}%")
+
+# Step 10: Plot accuracy and loss
+plt.figure(figsize=(12,5))
+plt.subplot(1,2,1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.subplot(1,2,2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Step 11: Make predictions
+predictions = model.predict(x_test)
+
+# Step 12: Display predictions for 10 random test images
+random_indices = random.sample(range(len(x_test)), 2)
+for idx in random_indices:
+    plt.imshow(x_test[idx].reshape(28, 28), cmap='gray')
+    predicted_label = np.argmax(predictions[idx])
+    plt.title(f"Predicted: {class_names[predicted_label]}")
+    plt.axis('off')
+    plt.show()
+
+# Step 12: Display predictions for 10 random test images
+random_indices = random.sample(range(len(x_test)), 2)
+for idx in random_indices:
+    plt.imshow(x_test[idx].reshape(28, 28), cmap='gray')
+    predicted_label = np.argmax(predictions[idx])
+    plt.title(f"Predicted: {class_names[predicted_label]}")
+    plt.axis('off')
+    plt.show()
