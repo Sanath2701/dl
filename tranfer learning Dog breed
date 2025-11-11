@@ -1,0 +1,141 @@
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import os
+import random
+
+# -------------------------------------------------
+# Step 1: Paths and Dataset
+# -------------------------------------------------
+base_dir = r"C:\Users\HP\Downloads\datasets_dog_breed_classification"
+train_dir = os.path.join(base_dir, "train")
+test_dir = os.path.join(base_dir, "test")
+labels_path = os.path.join(base_dir, "labels.csv")
+
+# Load labels
+labels_df = pd.read_csv(labels_path)
+labels_df["id"] = labels_df["id"] + ".jpg"
+
+# -------------------------------------------------
+# Step 2: Image Data Generators
+# -------------------------------------------------
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True
+)
+
+train_gen = train_datagen.flow_from_dataframe(
+    dataframe=labels_df,
+    directory=train_dir,
+    x_col="id",
+    y_col="breed",
+    subset="training",
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode="categorical"
+)
+
+val_gen = train_datagen.flow_from_dataframe(
+    dataframe=labels_df,
+    directory=train_dir,
+    x_col="id",
+    y_col="breed",
+    subset="validation",
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode="categorical"
+)
+
+num_classes = len(train_gen.class_indices)
+
+# -------------------------------------------------
+# Step 3: Model Creation
+# -------------------------------------------------
+base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+for layer in base_model.layers[:-30]:
+    layer.trainable = False
+
+model = Sequential([
+    base_model,
+    GlobalAveragePooling2D(),
+    Dense(256, activation='relu'),
+    Dropout(0.5),
+    Dense(num_classes, activation='softmax')
+])
+
+model.compile(optimizer=Adam(1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
+model.summary()
+
+# -------------------------------------------------
+# Step 4: Callbacks
+# -------------------------------------------------
+early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+checkpoint = ModelCheckpoint('best_dog_breed_model.keras', monitor='val_accuracy', save_best_only=True)
+
+# -------------------------------------------------
+# Step 5: Training
+# -------------------------------------------------
+history = model.fit(
+    train_gen,
+    validation_data=val_gen,
+    epochs=20,
+    callbacks=[early_stopping, checkpoint]
+)
+
+# -------------------------------------------------
+# Step 6: Evaluation
+# -------------------------------------------------
+val_loss, val_acc = model.evaluate(val_gen)
+print(f"Validation Accuracy: {val_acc * 100:.2f}%")
+
+# -------------------------------------------------
+# Step 7: Plot Accuracy Graph
+# -------------------------------------------------
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training vs Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+
+# -------------------------------------------------
+# Step 8: Save and Load Best Model
+# -------------------------------------------------
+model.save('final_dog_breed_model.keras')
+best_model = tf.keras.models.load_model('best_dog_breed_model.keras')
+
+# -------------------------------------------------
+# Step 9: Test Prediction (Random Images)
+# -------------------------------------------------
+class_labels = list(train_gen.class_indices.keys())
+test_images = [f for f in os.listdir(test_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+
+for i in range(5):
+    random_img = random.choice(test_images)
+    img_path = os.path.join(test_dir, random_img)
+
+    img = tf.keras.utils.load_img(img_path, target_size=(224, 224))
+    img_array = tf.keras.utils.img_to_array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    prediction = best_model.predict(img_array, verbose=0)
+    predicted_class = class_labels[np.argmax(prediction)]
+
+    plt.imshow(img)
+    plt.axis("off")
+    plt.title(f"Predicted: {predicted_class}")
+    plt.show()
