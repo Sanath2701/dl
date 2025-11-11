@@ -1,0 +1,89 @@
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import random
+
+base_dir = r"C:\Users\HP\Downloads\food-101\food-101\images"
+
+datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2
+)
+train_generator = datagen.flow_from_directory(
+    base_dir,
+    target_size=(128, 128),
+    batch_size=32,
+    class_mode='categorical',
+    subset='training'
+)
+val_generator = datagen.flow_from_directory(
+    base_dir,
+    target_size=(128, 128),
+    batch_size=32,
+    class_mode='categorical',
+    subset='validation'
+)
+model = Sequential([
+    Conv2D(32, (3,3), activation='relu', input_shape=(128, 128, 3)),
+    MaxPooling2D((2,2)),
+
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D((2,2)),
+
+    Conv2D(128, (3,3), activation='relu'),
+    MaxPooling2D((2,2)),
+
+    Flatten(),
+    Dense(256, activation='relu'),
+    Dropout(0.5),
+    Dense(101, activation='softmax')  # 101 food categories
+])
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+history = model.fit(
+    train_generator,
+    validation_data=val_generator,
+    epochs=10
+)
+val_loss, val_acc = model.evaluate(val_generator)
+print(f"\n✅ Validation Accuracy: {val_acc*100:.2f}%")
+
+plt.figure(figsize=(12,5))
+plt.subplot(1,2,1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.subplot(1,2,2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+class_labels = list(train_generator.class_indices.keys())
+print("Total Classes:", len(class_labels))
+
+for i in range(5):
+    img, label = val_generator.next()
+    idx = random.randint(0, len(img) - 1)
+    prediction = model.predict(np.expand_dims(img[idx], axis=0))
+    predicted_class = class_labels[np.argmax(prediction)]
+    
+    plt.imshow(img[idx])
+    plt.title(f"Predicted: {predicted_class}")
+    plt.axis('off')
+    plt.show()
