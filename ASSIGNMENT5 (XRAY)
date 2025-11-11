@@ -1,0 +1,77 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense,Flatten,Conv2D,MaxPooling2D
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+train_dir=r"C:\Users\Sanath\Downloads\Pneumonia X Ray-20221031T100017Z-001\Pneumonia X Ray\train"
+test_dir=r"C:\Users\Sanath\Downloads\Pneumonia X Ray-20221031T100017Z-001\Pneumonia X Ray\test"
+
+train_datagen=ImageDataGenerator(
+    rescale=1/255,
+    rotation_range=20,
+    zoom_range=0.2,
+    shear_range=0.2,
+    horizontal_flip='True',
+    fill_mode='nearest',
+    width_shift_range=0.2,
+    height_shift_range=0.2
+
+)
+test_datagen=ImageDataGenerator(rescale=1./255)
+
+train_gen=train_datagen.flow_from_directory(train_dir,target_size=(150,150),batch_size=128,class_mode='binary')
+test_gen=test_datagen.flow_from_directory(test_dir,target_size=(150,150),batch_size=128,class_mode='binary')
+
+model = Sequential([
+    Conv2D(32,(3,3),activation='relu',input_shape=(150,150,3)),
+    MaxPooling2D(2,2),
+
+    Conv2D(32,(3,3),activation='relu'),
+    MaxPooling2D(2,2),
+
+    Conv2D(32,(3,3),activation='relu'),
+    MaxPooling2D(2,2),
+
+    Flatten(),
+    Dense(128,activation='relu'),
+    Dense(1,activation='sigmoid')
+])
+
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+history=model.fit(train_gen,epochs=10,validation_data=test_gen)
+
+plt.plot(history.history['accuracy'],label='Training Accuracy')
+plt.plot(history.history['val_accuracy'],label='Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+
+
+predictions = model.predict(test_gen)
+
+def display_10_sample_predictions(model, test_generator, class_names):
+    # Reset the generator to start from the beginning
+    test_generator.reset()
+    
+    # Get a batch of images and labels
+    x_test, y_true = next(test_gen)
+    y_pred = model.predict(x_test[:10])  # Predict on the first 10 samples
+    y_pred_labels = (y_pred > 0.5).astype(int).reshape(-1)
+
+    plt.figure(figsize=(15, 5))
+    for i in range(10):
+        plt.subplot(2, 5, i + 1)
+        plt.imshow(x_test[i])
+        true_label = class_names[int(y_true[i])]
+        pred_label = class_names[y_pred_labels[i]]
+        plt.title(f"Pred: {pred_label}\nTrue: {true_label}")
+        plt.axis('off')
+    plt.show()
+
+class_names = ['Normal', 'Pneumonia']  # Adjust based on your class labels
+display_10_sample_predictions(model, test_gen, class_names)
+
